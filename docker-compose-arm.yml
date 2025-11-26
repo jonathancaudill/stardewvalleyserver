@@ -2,8 +2,8 @@ services:
   valley:
     platform: linux/arm64
     build:
-      context: ./docker
-      dockerfile: Dockerfile-arm
+      context: .
+      dockerfile: docker/Dockerfile-arm
     container_name: stardew
     environment:
       # VNC

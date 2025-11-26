@@ -81,8 +81,8 @@ RUN wget --user-agent="Mozilla" https://github.com/Pathoschild/SMAPI/releases/do
     rm /data/nexus.zip
 
 # Add Mods & Scripts
-COPY ["mods/", "/data/Stardew/game/Mods/"]
-COPY scripts/ /opt/
+COPY ["docker/mods/", "/data/Stardew/game/Mods/"]
+COPY docker/scripts/ /opt/
 
 # Set permissions (game binary will be mounted later, so we set permissions on directories)
 RUN chmod -R 777 /data/Stardew/ && \
@@ -90,12 +90,14 @@ RUN chmod -R 777 /data/Stardew/ && \
     chmod +x /opt/*.sh
 
 # Setup utils service (for compatibility with original structure)
-RUN mkdir -p /etc/services.d/utils && touch /etc/services.d/app/utils.dep 2>/dev/null || true
-COPY run /etc/services.d/utils/run 2>/dev/null || true
-RUN chmod +x /etc/services.d/utils/run 2>/dev/null || true
+# Note: run file is optional - create it if it doesn't exist
+RUN mkdir -p /etc/services.d/utils /etc/services.d/app && \
+    touch /etc/services.d/app/utils.dep || true
+COPY docker/run /etc/services.d/utils/run
+RUN chmod +x /etc/services.d/utils/run
 
 # Copy entrypoint script
-COPY docker-entrypoint-arm.sh /startapp.sh
+COPY docker/docker-entrypoint-arm.sh /startapp.sh
 RUN chmod +x /startapp.sh
 
 # Set working directory
