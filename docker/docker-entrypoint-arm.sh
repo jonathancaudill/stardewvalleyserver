@@ -1,5 +1,11 @@
 #!/bin/bash
 export HOME=/config
+export DISPLAY=:0
+
+# Setup VNC password from environment variable
+if [ -n "$VNC_PASSWORD" ]; then
+    echo "$VNC_PASSWORD" | x11vnc -storepasswd /root/.vnc/passwd
+fi
 
 # Copy game files from absolute path on host if they exist and game directory is empty
 # This allows game files to be stored outside the git repo

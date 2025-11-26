@@ -1,17 +1,57 @@
-# Pull base image.
-# Force ARM64 platform - jlesage/baseimage-gui may not have ARM64 support
-# If this fails, we may need to use a different base image
-FROM --platform=linux/arm64 jlesage/baseimage-gui:debian-11
+# Pull base image - using standard Debian ARM64 since jlesage/baseimage-gui doesn't support ARM64
+FROM --platform=linux/arm64 debian:11-slim
 
 # Set the name of the application.
 ENV APP_NAME="StardewValley"
+ENV DISPLAY=:0
+ENV VNC_PASSWORD=insecure
+ENV DISPLAY_WIDTH=1200
+ENV DISPLAY_HEIGHT=900
 
 # Uses the same PATH structure as GOG version
 ENV GAME_PATH="/data/Stardew"
 
-# Install dependencies
+# Install dependencies including GUI/VNC components
 # SDL2 and OpenAL are required for ValleyCore (native ARM64 Stardew Valley)
-RUN apt-get update && apt-get install -y wget unzip tar strace mono-complete xterm gettext-base jq netcat procps locales libsdl2-2.0-0 libopenal1 && apt-get clean
+RUN apt-get update && apt-get install -y \
+    wget unzip tar strace mono-complete xterm gettext-base jq netcat procps locales \
+    libsdl2-2.0-0 libopenal1 \
+    xvfb x11vnc fluxbox novnc websockify \
+    supervisor \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create directories for VNC and config
+RUN mkdir -p /root/.vnc /config/xdg/config/StardewValley/Saves
+
+# VNC password will be set at runtime from environment variable
+
+# Create supervisor config for VNC and noVNC
+RUN mkdir -p /etc/supervisor/conf.d && \
+    echo '[supervisord]' > /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'nodaemon=true' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'user=root' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo '' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo '[program:xvfb]' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'command=/usr/bin/Xvfb :0 -screen 0 1200x900x24' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'autorestart=true' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'priority=100' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo '' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo '[program:fluxbox]' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'command=/usr/bin/fluxbox' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'environment=DISPLAY=":0"' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'autorestart=true' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'priority=200' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo '' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo '[program:x11vnc]' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'command=/usr/bin/x11vnc -forever -shared -rfbport 5900 -display :0 -usepw -noxdamage' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'autorestart=true' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'priority=300' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo '' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo '[program:novnc]' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'command=/usr/bin/websockify --web=/usr/share/novnc/ 5800 localhost:5900' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'autorestart=true' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'priority=400' >> /etc/supervisor/conf.d/supervisord.conf
 
 # Create directory structure
 RUN mkdir -p ${GAME_PATH}/game && \
@@ -49,12 +89,21 @@ RUN chmod -R 777 /data/Stardew/ && \
     chown -R 1000:1000 /data/Stardew && \
     chmod +x /opt/*.sh
 
-# Setup utils service
-RUN mkdir /etc/services.d/utils && touch /etc/services.d/app/utils.dep
-COPY run /etc/services.d/utils/run 
-RUN chmod +x /etc/services.d/utils/run 
+# Setup utils service (for compatibility with original structure)
+RUN mkdir -p /etc/services.d/utils && touch /etc/services.d/app/utils.dep 2>/dev/null || true
+COPY run /etc/services.d/utils/run 2>/dev/null || true
+RUN chmod +x /etc/services.d/utils/run 2>/dev/null || true
 
 # Copy entrypoint script
 COPY docker-entrypoint-arm.sh /startapp.sh
 RUN chmod +x /startapp.sh
+
+# Set working directory
+WORKDIR /data/Stardew/game
+
+# Expose ports
+EXPOSE 5900 5800
+
+# Start supervisor and entrypoint
+CMD ["/bin/bash", "-c", "supervisord -c /etc/supervisor/conf.d/supervisord.conf & /startapp.sh"]
 
