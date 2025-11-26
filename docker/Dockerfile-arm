@@ -1,0 +1,60 @@
+# Pull base image.
+# Force ARM64 platform - jlesage/baseimage-gui may not have ARM64 support
+# If this fails, we may need to use a different base image
+FROM --platform=linux/arm64 jlesage/baseimage-gui:debian-11
+
+# Set the name of the application.
+ENV APP_NAME="StardewValley"
+
+# Uses the same PATH structure as GOG version
+ENV GAME_PATH="/data/Stardew"
+
+# Install dependencies
+# SDL2 and OpenAL are required for ValleyCore (native ARM64 Stardew Valley)
+RUN apt-get update && apt-get install -y wget unzip tar strace mono-complete xterm gettext-base jq netcat procps locales libsdl2-2.0-0 libopenal1 && apt-get clean
+
+# Create directory structure
+RUN mkdir -p ${GAME_PATH}/game && \
+    mkdir -p /data/nexus && \
+    mkdir -p /opt/valleycore
+
+# Download ValleyCore for native ARM64 Stardew Valley support
+# ValleyCore patches the game DLL to work with ARM64 .NET runtime
+RUN VALLEYCORE_VERSION="v1.6.15b" && \
+    wget -qO /tmp/valleycore.tar.gz "https://github.com/a9ix/ValleyCore/releases/download/${VALLEYCORE_VERSION}/ValleyCore.tar.gz" && \
+    tar -xzf /tmp/valleycore.tar.gz -C /opt/valleycore && \
+    rm /tmp/valleycore.tar.gz && \
+    chmod +x /opt/valleycore/patch.sh && \
+    chmod +x /opt/valleycore/smapi-wrapper.sh 2>/dev/null || true
+
+# Install .NET SDK 5.0.408 for ARM64 (for SMAPI and mods)
+RUN wget -qO dotnet.tar.gz https://download.visualstudio.microsoft.com/download/pr/d4b71fac-a2fd-4516-ac58-100fb09d796a/e79d6c2a8040b59bf49c0d167ae70a7b/dotnet-sdk-5.0.408-linux-arm64.tar.gz &&\
+     tar -zxf dotnet.tar.gz -C /usr/share/dotnet &&\
+     rm dotnet.tar.gz &&\
+     ln -s /usr/share/dotnet/dotnet /usr/bin/dotnet
+
+# Download and install SMAPI
+# Note: SMAPI installation will happen at runtime after game binary is mounted
+# This prepares the installer for later use
+RUN wget --user-agent="Mozilla" https://github.com/Pathoschild/SMAPI/releases/download/4.1.10/SMAPI-4.1.10-installer.zip -qO /data/nexus.zip && \
+    unzip /data/nexus.zip -d /data/nexus/ && \
+    rm /data/nexus.zip
+
+# Add Mods & Scripts
+COPY ["mods/", "/data/Stardew/game/Mods/"]
+COPY scripts/ /opt/
+
+# Set permissions (game binary will be mounted later, so we set permissions on directories)
+RUN chmod -R 777 /data/Stardew/ && \
+    chown -R 1000:1000 /data/Stardew && \
+    chmod +x /opt/*.sh
+
+# Setup utils service
+RUN mkdir /etc/services.d/utils && touch /etc/services.d/app/utils.dep
+COPY run /etc/services.d/utils/run 
+RUN chmod +x /etc/services.d/utils/run 
+
+# Copy entrypoint script
+COPY docker-entrypoint-arm.sh /startapp.sh
+RUN chmod +x /startapp.sh
+

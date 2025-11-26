@@ -2,6 +2,27 @@
 
 This project aims to autostart a Stardew Valley Multiplayer Server as easy as possible.
 
+## Quick Start
+
+Choose your platform:
+- **x86 Linux (Steam/GOG):** See [Steam](#steam) or [GOG](#gog) sections
+- **ARM64 (Raspberry Pi 5):** See [ARM Setup](#arm-raspberry-pi-5--arm64-linux) section
+
+**For ARM64 users:** This setup uses [ValleyCore](https://github.com/a9ix/ValleyCore) to run Stardew Valley natively on ARM64 with full SMAPI modding support - no emulation required!
+
+## Table of Contents
+
+- [Quick Start](#quick-start)
+- [Setup Options](#setup)
+  - [Steam](#steam)
+  - [GOG](#gog)
+  - [ARM (Raspberry Pi 5)](#arm-raspberry-pi-5--arm64-linux)
+- [Configuration](#configuration)
+- [Game Setup](#game-setup)
+- [Accessing the Server](#accessing-the-server)
+- [Mods](#mods)
+- [Troubleshooting](#troubleshooting)
+
 ## Notes
 
 - Previous versions provided game files to create the server with the Docker container. To respect ConcernedApe's work and follow
@@ -52,6 +73,257 @@ Sign in, go to Games, find Stardew, change the system to Linux, and download the
 like `stardew_valley_x.x.x.xxx.sh`. Unzip this file (using Git Bash if you are on Windows), and copy the files within the 
 `data/noarch/` directory to `docker/game_data/`. Start the container using `docker compose -f docker-compose-gog.yml up`. To 
 rebuild the container after updating the files, use `docker compose -f docker-compose-gog.yml build --no-cache`.
+
+### ARM (Raspberry Pi 5 / ARM64 Linux)
+
+This setup is designed for ARM64 systems like the Raspberry Pi 5. It uses **[ValleyCore](https://github.com/a9ix/ValleyCore)** to run Stardew Valley **natively** on ARM64 hardware with full SMAPI modding support - no emulation required!
+
+#### How It Works
+
+ValleyCore enables native ARM64 execution by:
+1. Using the standard Linux x86 game files (same as GOG/Steam Linux version)
+2. Patching the game DLL to work with ARM64 .NET runtime
+3. Replacing the x86-64 runtime with ARM64 .NET runtime
+4. Running the game natively without any emulation overhead
+
+**Performance Benefits:** Native ARM64 execution provides significantly better performance than emulation:
+- **Startup:** ~40s (native) vs ~2m 30s (emulated)
+- **Save loading:** ~30s (native) vs ~1m 30s (emulated)  
+- **In-game:** ~60 fps (native) vs ~40 fps (emulated)
+
+#### Prerequisites
+
+- Raspberry Pi 5 (or any ARM64 Linux system)
+- Docker and Docker Compose installed
+- Linux x86/x86-64 Stardew Valley game files (from Steam or GOG)
+- At least 4GB RAM recommended
+
+#### Step 1: Obtain Linux Game Files
+
+You need the standard Linux x86/x86-64 version of Stardew Valley:
+
+**From Steam:**
+1. Use SteamCMD on any system (x86 or ARM) to download the Linux version
+2. The game files will be in your Steam library directory
+3. Look for files like `StardewValley` (executable), `Stardew Valley.dll`, `Content/` folder, etc.
+
+**From GOG:**
+1. Download the Linux installer from GOG
+2. Extract the installer: `unzip stardew_valley_x.x.x.xxx.sh`
+3. Game files are in `data/noarch/` directory
+
+**Important:** You need the Linux version, not macOS or Windows. The macOS binary won't work on Linux.
+
+#### Step 2: Prepare Game Files
+
+You have two options for storing game files:
+
+**Option A: Store in Git Repo (Recommended for Portainer)**
+```bash
+# Create the directory structure
+mkdir -p docker/game_data/game
+
+# Copy your game files
+cp -r /path/to/steam/stardew/files/* docker/game_data/game/
+# OR for GOG:
+cp -r /path/to/gog/data/noarch/* docker/game_data/game/
+
+# Verify the executable exists
+ls docker/game_data/game/StardewValley
+# or
+ls docker/game_data/game/Stardew\ Valley
+```
+
+**Option B: Store Outside Repo (For CasaOS/Portainer)**
+If you're using Portainer or want to keep game files separate:
+1. Place game files at: `/DATA/AppData/stardew-multiplayer-docker/docker/game_data/game/`
+2. The container will automatically copy them at startup if not found in the repo
+
+#### Step 3: Setup via Command Line
+
+1. **Clone or download this repository:**
+   ```bash
+   git clone <your-repo-url>
+   cd stardew-multiplayer-docker
+   ```
+
+2. **Build and start the container:**
+   ```bash
+   # Build and start in background
+   docker compose -f docker-compose-arm.yml up --build -d
+   
+   # Or watch logs in foreground
+   docker compose -f docker-compose-arm.yml up --build
+   ```
+
+3. **Monitor the build:**
+   - First build will download the Debian base image (~200-500MB, one-time)
+   - ValleyCore will be downloaded automatically
+   - ARM64 .NET SDK will be installed
+   - Build typically takes 5-15 minutes depending on your connection
+
+4. **Check container status:**
+   ```bash
+   docker compose -f docker-compose-arm.yml ps
+   docker compose -f docker-compose-arm.yml logs -f
+   ```
+
+#### Step 4: Setup via Portainer
+
+1. **Upload repository to Git:**
+   - Push this repo to GitHub, GitLab, or your preferred git hosting
+   - Make sure game files are included if using Option A above
+
+2. **In Portainer:**
+   - Go to **Stacks** → **Add stack**
+   - Name: `stardew-valley-arm`
+   - Build method: **Repository**
+   - Fill in:
+     - **Repository URL:** Your git repo URL
+     - **Compose path:** `docker-compose-arm.yml`
+     - **Reference:** `main` (or your branch name)
+   - Click **Deploy the stack**
+
+3. **If using Option B (game files outside repo):**
+   - Make sure files are at `/DATA/AppData/stardew-multiplayer-docker/docker/game_data/game/`
+   - The container will copy them automatically at startup
+
+4. **Monitor deployment:**
+   - Go to **Stacks** → your stack name
+   - Click **Logs** to watch the build progress
+   - Check **Containers** to see status
+
+#### Step 5: First-Time Setup
+
+Once the container is running:
+
+1. **Access the game:**
+   - **VNC:** Connect to `localhost:5902` (or your Pi's IP) with password `insecure`
+   - **Web Interface:** Open `http://localhost:5801` (or your Pi's IP) in browser, password `insecure`
+
+2. **Automatic setup happens:**
+   - ValleyCore patch is applied automatically on first run
+   - SMAPI is installed automatically if game files are detected
+   - Mods are configured based on environment variables
+
+3. **Create or load your first game:**
+   - The game should start automatically
+   - Create a new farm or load an existing save
+   - Press **F9** (default) to enable Always On Server mode
+
+4. **Verify everything works:**
+   - Check that SMAPI loaded (you'll see SMAPI messages in console)
+   - Verify mods are working
+   - Test multiplayer connection
+
+#### Directory Structure
+
+Your repository should look like this:
+```
+stardew-multiplayer-docker/
+├── docker/
+│   ├── game_data/          # Game files go here (Option A)
+│   │   └── game/
+│   │       ├── StardewValley (or "Stardew Valley")
+│   │       ├── Stardew Valley.dll
+│   │       ├── Content/
+│   │       └── ...
+│   ├── Dockerfile-arm
+│   ├── docker-entrypoint-arm.sh
+│   ├── mods/
+│   └── scripts/
+├── docker-compose-arm.yml
+├── configs/
+│   └── autoload.json
+└── valley_saves/           # Created automatically
+```
+
+#### Configuration
+
+All mod configuration is done via environment variables in `docker-compose-arm.yml`. See the [Configuration](#configuration) section below for all available options.
+
+Key settings for ARM:
+- VNC password: Change `VNC_PASSWORD` for security
+- Display size: Adjust `DISPLAY_HEIGHT` and `DISPLAY_WIDTH` if needed
+- Mod enable/disable: Set `ENABLE_*_MOD` variables to `true` or `false`
+
+#### Troubleshooting
+
+**Build fails with "exec format error":**
+- The base image might not support ARM64. Check that `platform: linux/arm64` is set in docker-compose file
+- Try: `docker compose -f docker-compose-arm.yml build --no-cache --platform linux/arm64`
+
+**Game files not found:**
+- Verify game files exist: `ls docker/game_data/game/StardewValley`
+- Check container logs: `docker compose -f docker-compose-arm.yml logs`
+- If using Option B, verify path: `/DATA/AppData/stardew-multiplayer-docker/docker/game_data/game/`
+
+**ValleyCore patch fails:**
+- Check logs for specific error messages
+- Verify game files are complete (not corrupted)
+- Try manually running patch: `docker compose -f docker-compose-arm.yml exec valley bash /data/Stardew/game/patch.sh`
+
+**SMAPI installation fails:**
+- Check that game binary exists and is executable
+- Verify .NET SDK installed: `docker compose -f docker-compose-arm.yml exec valley dotnet --version`
+- Check SMAPI logs in container
+
+**Game won't start:**
+- Check container logs: `docker compose -f docker-compose-arm.yml logs -f`
+- Access VNC and check for error messages
+- Verify SDL2 and OpenAL are installed: `docker compose -f docker-compose-arm.yml exec valley dpkg -l | grep -E "sdl2|openal"`
+
+**Performance issues:**
+- Ensure you're using native ARM64 (not emulated)
+- Check CPU usage: `docker stats`
+- Consider limiting CPU in compose file (see commented `deploy.resources` section)
+
+**Portainer-specific issues:**
+- If relative paths don't work, check that Portainer is using the Repository method (not Web editor)
+- Verify git repo is accessible
+- Check Portainer logs for build errors
+
+#### Quick Reference Commands
+
+```bash
+# Start container
+docker compose -f docker-compose-arm.yml up -d
+
+# Stop container
+docker compose -f docker-compose-arm.yml down
+
+# View logs
+docker compose -f docker-compose-arm.yml logs -f
+
+# Rebuild after changes
+docker compose -f docker-compose-arm.yml up --build -d
+
+# Execute commands in container
+docker compose -f docker-compose-arm.yml exec valley bash
+
+# Check container status
+docker compose -f docker-compose-arm.yml ps
+
+# View resource usage
+docker stats stardew
+```
+
+#### Technical Details
+
+- **Base Image:** `jlesage/baseimage-gui:debian-11` (ARM64 variant)
+- **ValleyCore Version:** v1.6.15b (with SMAPI support)
+- **.NET SDK:** 5.0.408 ARM64
+- **SMAPI Version:** 4.1.10
+- **Dependencies:** SDL2, OpenAL, Mono, .NET SDK
+- **Architecture:** ARM64 (aarch64) only
+
+#### Notes
+
+- **Native Performance:** No emulation overhead - runs natively on ARM64
+- **Game Files:** Uses standard Linux x86 binaries (patched at runtime)
+- **Mods:** Full SMAPI modding support works natively
+- **Updates:** To update game files, replace them and restart the container
+- **Saves:** Game saves are stored in `valley_saves/` directory (persisted via volume)
 
 ### Configuration
 
@@ -226,16 +498,49 @@ for more info.)
 
 ## Troubleshooting
 
-### Waiting for Day to End
+### General Issues
 
-Check VNC just to make sure the host hasn't gotten stuck on a prompt.
+**Waiting for Day to End:**
+- Check VNC just to make sure the host hasn't gotten stuck on a prompt.
 
-### Error Messages in Console
-
-Usually you should be able to ignore any message there. If the game doesn't start or any errors appear, you should look
+**Error Messages in Console:**
+- Usually you should be able to ignore any message there. If the game doesn't start or any errors appear, you should look
 for messages like "cannot open display", which would most likely indicate permission errors.
 
-### VNC
-
-Access the game via VNC to initially load or start a pre-generated game save. You can control the server from there or
+**VNC Connection Issues:**
+- Access the game via VNC to initially load or start a pre-generated game save. You can control the server from there or
 edit the config.json files in the configs folder.
+- Default VNC password is `insecure` - change it in docker-compose file for security
+- Port 5902 for VNC, port 5801 for web interface
+
+**Container Won't Start:**
+- Check Docker logs: `docker compose -f docker-compose-*.yml logs`
+- Verify all required files are in place
+- Check disk space: `df -h`
+- Verify Docker has enough resources allocated
+
+**Game Crashes or Freezes:**
+- Check container logs for errors
+- Verify game files are not corrupted
+- Check available memory: `docker stats`
+- Try reducing display resolution in compose file
+
+### ARM-Specific Issues
+
+See the [ARM Setup](#arm-raspberry-pi-5--arm64-linux) section for detailed ARM troubleshooting, including:
+- Build failures with "exec format error"
+- ValleyCore patch issues
+- SMAPI installation problems
+- Performance optimization
+
+### Getting Help
+
+If you encounter issues not covered here:
+1. Check the container logs: `docker compose -f docker-compose-*.yml logs -f`
+2. Check SMAPI error logs (via VNC or in container)
+3. Search existing GitHub issues
+4. Create a new issue with:
+   - Your platform (x86/ARM)
+   - Docker compose file used
+   - Relevant log excerpts
+   - Steps to reproduce
